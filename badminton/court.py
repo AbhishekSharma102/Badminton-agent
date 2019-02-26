@@ -7,42 +7,43 @@ from OpenGL.GLU import *
 import numpy
 
 class RenderCourt():
-    self.vertices = (
-        (260, 670, 0),
-        (260, -670, 0),
-        (-260, -670, 0),
-        (-260, 670, 0) 
-        )
-    
-    self.shuttle_vertices = (
-        (10, -10, -10),
-        (10, 10, -10),
-        (-10, 10, -10),
-        (-10, -10, -10),
-        (10, -10, 10),
-        (10, 10, 10),
-        (-10, -10, 10),
-        (-10, 10, 10)
-        )
-    
-    self.shuttle_edges = (
-        (0,1),
-        (0,3),
-        (0,4),
-        (2,1),
-        (2,3),
-        (2,7),
-        (6,3),
-        (6,4),
-        (6,7),
-        (5,1),
-        (5,4),
-        (5,7)
-        )
-    
-    self.shuttle_coord = [0, 0, 0]
-    self.p1_coord = [0, 0]
-    self.p2_coord = [0, 0]
+    def __init__(self):
+        self.vertices = (
+            (260, 670, 0),
+            (260, -670, 0),
+            (-260, -670, 0),
+            (-260, 670, 0) 
+            )
+        
+        self.shuttle_vertices = (
+            (10, -10, -10),
+            (10, 10, -10),
+            (-10, 10, -10),
+            (-10, -10, -10),
+            (10, -10, 10),
+            (10, 10, 10),
+            (-10, -10, 10),
+            (-10, 10, 10)
+            )
+        
+        self.shuttle_edges = (
+            (0,1),
+            (0,3),
+            (0,4),
+            (2,1),
+            (2,3),
+            (2,7),
+            (6,3),
+            (6,4),
+            (6,7),
+            (5,1),
+            (5,4),
+            (5,7)
+            )
+        
+        self.shuttle_coord = [0, 0, 0]
+        self.p1_coord = [0, 0]
+        self.p2_coord = [0, 0]
     
     def IdentityMat44(self):
         return numpy.matrix(numpy.identity(4), copy=False, dtype='float32')

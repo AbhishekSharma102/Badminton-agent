@@ -11,17 +11,18 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 from math import sqrt, log, atan, exp, sin, cos, tan, pi, ceil
 from badminton.court import RenderCourt
+from gym import spaces
 
 class BadmintonEnv(gym.Env):
     def __init__(self):
         #LOAD PYGAME WINDOW
+        self.render_court = RenderCourt()
         pygame.init()
         display = (800,600)
         pygame.display.set_mode(display, DOUBLEBUF|OPENGL)
         glMatrixMode(GL_PROJECTION)
         gluPerspective(45, (display[0]/display[1]), 0.1, 10000.0)
-        
-        view_mat = self.IdentityMat44()
+        view_mat = self.render_court.IdentityMat44()
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
         glTranslatef(0, 0, -2000)
@@ -78,7 +79,19 @@ class BadmintonEnv(gym.Env):
         #store intial value inside sin of y(t)
         
         self.make_frame()
-        self.render_court = RenderCourt()
+        #player speed ranges
+        self.max_player_speed = 5
+        self.min_player_speed = 0
+        #taken from internet
+        self.max_shuttle_speed = 50
+        self.min_shuttle_speed = 0
+        #angle range
+        self.min_angle = -np.pi
+        self.max_angle = np.pi
+        self.min_action_space_attr = np.array([self.min_player_speed, self.min_angle, self.min_player_speed, self.min_angle, self.min_angle])
+        self.max_action_space_attr = np.array([self.max_player_speed, self.max_angle, self.max_player_speed, self.max_angle, self.max_angle])
+        self.action_space = spaces.Box(low=self.min_action_space_attr, high=self.max_action_space_attr, shape=(5,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=0, high=300, shape=(800,600), dtype=np.float32)
             
     def new_rally(self):
         #players come back to center court 
@@ -264,7 +277,7 @@ class BadmintonEnv(gym.Env):
                 else:
                     self.player_points['p1']+=1
             self.new_rally()
-        
+            
         
     def act(self, p1_action, p2_action):
         #take action for each player
@@ -319,17 +332,56 @@ class BadmintonEnv(gym.Env):
         img = Image.fromarray(np.uint8(self.current_frame) , 'RGB')
         img.show()
     
-    def render(self, i):
+    '''def render(self, i):
         img = Image.fromarray(np.uint8(self.current_frame) , 'RGB')
         z = self.shuttle_rel_pos['z']
         #b = self.shuttle_within_range('p2')
         img.save(f'./Data/frames/{i}_{z}.jpg')
         #self.video.write(cv2.imread('./Data/current_frame.jpg'))
-    
+    '''
     def checkEpisodeOver(self):
         if self.player_points['p1'] >= 15 or self.player_points['p2'] >= 15:
             return True
         return False
+
+    def getReward(self, points_before_action):
+        return (self.player_points['p1'] - points_before_action['p1']) 
+                - (self.player_points['p2'] - points_before_action['p2'])
+    
+    def convertActionListToAction(self, action_list):
+        action = {'p_attr': { 'v': action_list[0],
+                          'alpha': action_list[1]
+                        },
+                  's_attr': { 'vi': action_list[2],
+                          'thetai': action_list[3],
+                          'psi': action_list[4]
+                        }
+                 }
+        return action
+    
+    def closestInterceptablePoint(self):
+        """
+        returns x, y, z, t, points where it lands and time taken since it was hit.
+        """
+        pass
+    
+    def getShuttleAttributesForP2(self):
+        if self.shuttle_within_range('p2'):
+            #return one of hard coded trajectories
+        else:
+            return { 'vi': 0, 'thetai': 0, 'psi': 0 }
+        
+    def getPlayerAttributesForP2(self):
+        if self.chance == 'p1' or self.shuttle_within_range('p2'):
+            return { 'v': 0, 'alpha': 0 }
+        else:
+            #get shortest path between curr pos and the landing point
+    
+    def getP2Action(self):
+        action = {}
+        action['p_attr'] = self.getPlayerAttributesForP2()
+        action['s_attr'] = self.getShuttleAttributesForP2()
+        return action
     
     def step(self, action):
         """
@@ -359,10 +411,12 @@ class BadmintonEnv(gym.Env):
                  However, official evaluations of your agent are not allowed to
                  use this for learning.
         """
-        
+        points_before_action = self.player_points
+        #Take action. Need to define action_state, as p1 action is action_state[action]
+        self.act(self.convertActionListToAction(action), self.getP2Action())
+        reward = self.getReward(points_before_action)
         ob = glReadPixels(0, 0, 800, 600, GL_RGB, GL_UNSIGNED_INT)
         episode_over = self.checkEpisodeOver()
-        
         return ob, reward, episode_over, {}
     
     def reset(self):
@@ -439,3 +493,6 @@ class BadmintonEnv(gym.Env):
         """
         logger.warn("Could not seed environment %s", self)
         return
+    
+    def close(self):
+        pygame.quit()
