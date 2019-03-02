@@ -12,6 +12,7 @@ from OpenGL.GLU import *
 from math import sqrt, log, atan, exp, sin, cos, tan, pi, ceil
 from badminton.court import RenderCourt
 from gym import spaces
+import random
 
 class BadmintonEnv(gym.Env):
     def __init__(self):
@@ -22,12 +23,12 @@ class BadmintonEnv(gym.Env):
         pygame.display.set_mode(display, DOUBLEBUF|OPENGL)
         glMatrixMode(GL_PROJECTION)
         gluPerspective(45, (display[0]/display[1]), 0.1, 10000.0)
-        view_mat = self.render_court.IdentityMat44()
+        self.view_mat = self.render_court.IdentityMat44()
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
-        glTranslatef(0, 0, -2000)
+        glTranslatef(0, 0, -5000)
         glRotatef(-45, 1, 0, 0)
-        glGetFloatv(GL_MODELVIEW_MATRIX, view_mat)
+        glGetFloatv(GL_MODELVIEW_MATRIX, self.view_mat)
         glLoadIdentity()
         
         #parameters representing the game
@@ -90,7 +91,7 @@ class BadmintonEnv(gym.Env):
         self.max_angle = np.pi
         self.min_action_space_attr = np.array([self.min_player_speed, self.min_angle, self.min_player_speed, self.min_angle, self.min_angle])
         self.max_action_space_attr = np.array([self.max_player_speed, self.max_angle, self.max_player_speed, self.max_angle, self.max_angle])
-        self.action_space = spaces.Box(low=self.min_action_space_attr, high=self.max_action_space_attr, shape=(5,), dtype=np.float32)
+        self.action_space = spaces.Box(low=self.min_action_space_attr, high=self.max_action_space_attr)
         self.observation_space = spaces.Box(low=0, high=300, shape=(800,600), dtype=np.float32)
             
     def new_rally(self):
@@ -99,7 +100,7 @@ class BadmintonEnv(gym.Env):
         #shuttle is launched by p1
         self.shuttle_rel_pos = {'k':-3.35, 'z':0.5, 't':0}
         self.shuttle_rel_pos_prev = {'k':-3.35, 'z':0.5, 't':-1}
-        self.shuttle_attr = {'vi':None, 'thetai':None, 'cx':6.7, 
+        self.shuttle_attr = {'vi':1, 'thetai':0.1, 'cx':6.7, 
                              'cy':3.05, 'psi':0, 'k0':-3.35, 'z0':0.5}
         self.chance = 'p1'
         self.make_frame()
@@ -109,6 +110,7 @@ class BadmintonEnv(gym.Env):
         #d-t #z-t
         v_t = 6.8;
         g = 9.8;
+        #print(vi, thetai)
         d = (pow(v_t,2)/g)*log((vi*cos(thetai)*g*t+pow(v_t,2))/pow(v_t,2));
         
         arg_init = (((v_t/(vi*cos(thetai)))*(exp(g*0/pow(v_t,2))-1))
@@ -144,7 +146,9 @@ class BadmintonEnv(gym.Env):
         #increment current time using frame rate
         self.shuttle_rel_pos['t'] += self.frame_rate
         #find the distance(d) and height(z) traversed by the shuttle
+        #print(self.shuttle_attr)
         vi, thetai, t = self.shuttle_attr['vi'], self.shuttle_attr['thetai'], self.shuttle_rel_pos['t']
+        #print(vi, thetai, t)
         d, z = self.shuttle_trajectory_wrt_t(vi, thetai, t)
         #based on player chance compute the shuttle position on court 
         if(self.chance == 'p1'):
@@ -345,8 +349,7 @@ class BadmintonEnv(gym.Env):
         return False
 
     def getReward(self, points_before_action):
-        return (self.player_points['p1'] - points_before_action['p1']) 
-                - (self.player_points['p2'] - points_before_action['p2'])
+        return (self.player_points['p1'] - points_before_action['p1']) - (self.player_points['p2'] - points_before_action['p2'])
     
     def convertActionListToAction(self, action_list):
         action = {'p_attr': { 'v': action_list[0],
@@ -363,11 +366,54 @@ class BadmintonEnv(gym.Env):
         """
         returns x, y, z, t, points where it lands and time taken since it was hit.
         """
-        pass
+        stuttle_eqn = lambda t: 0.5 + self.shuttle_trajectory_wrt_t(self.shuttle_attr['vi'], 
+                                                              self.shuttle_attr['thetai'], abs(t))[1]
+        t_upper = 1
+        while(stuttle_eqn(t_upper)>0):
+            t_upper += 1
+        t_before_landing = bisect(stuttle_eqn, 0, t_upper)
+        frame_time = floor(t_before_landing/self.frame_rate)*self.frame_rate#+self.frame_rate
+        
+        while(stuttle_eqn(frame_time)<0 and frame_time>0):
+            frame_time -= self.frame_rate
+            
+        d, z = self.shuttle_trajectory_wrt_t(self.shuttle_attr['vi'], self.shuttle_attr['thetai'], frame_time)
+        
+        #based on player chance compute the shuttle rel position on court 
+        if(self.chance == 'p1'):
+            k = self.shuttle_attr['k0'] - d 
+            z = self.shuttle_attr['z0'] + z 
+        else:
+            k = self.shuttle_attr['k0'] + d 
+            z = self.shuttle_attr['z0'] + z 
+        #get shuttle abs position in xy
+        x = (k*cos(self.shuttle_attr['psi']) + self.shuttle_attr['cx'])
+        y = (k*sin(self.shuttle_attr['psi']) + self.shuttle_attr['cy'])
+        return x,y,z,frame_time
+    
+    def getRandomVelocityPsiTheta(self):
+        velocity = random.randint(self.min_shuttle_speed, self.max_shuttle_speed)
+        psi = random.uniform(-np.pi/4, np.pi/4)
+        theta = random.uniform(0, np.pi/2)
+        return velocity, theta, psi
+        
     
     def getShuttleAttributesForP2(self):
         if self.shuttle_within_range('p2'):
             #return one of hard coded trajectories
+            '''closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
+            psi = atan((closest_x - self.p_pos['p2']['x']) / (closest_y - self.p_pos['p2']['y']))
+            
+            vt, g = 6.8, 9.8
+            x, y = self.getShuttleEndPoint(closest_x, closest_y)
+            speed_of_return = random.randint(self.min_shuttle_speed, self.max_shuttle_speed)
+            thetai = Symbol('thetai')
+            numerator = sy.sin( (sy.exp(g*x/pow(vt, 2))-1)*(vt/(speed_of_return*sy.cos(thetai)) ) + sy.atan( vt/(speed_of_return*sy.sin(thetai)) ) )
+            denominator = sy.sin( sy.atan(vt/ (speed_of_return*sy.sin(thetai))))
+            eqn = (sy.log(numerator/denominator)*pow(vt, 2)/g) - y
+            thetai_val = solve(eqn, thetai)'''
+            speed_of_return, thetai_val, psi = self.getRandomVelocityPsiTheta()
+            return {'vi': speed_of_return, 'thetai': thetai_val, 'psi': psi}
         else:
             return { 'vi': 0, 'thetai': 0, 'psi': 0 }
         
@@ -376,6 +422,12 @@ class BadmintonEnv(gym.Env):
             return { 'v': 0, 'alpha': 0 }
         else:
             #get shortest path between curr pos and the landing point
+            closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
+            distance_to_reach = sqrt(pow(closest_x - self.p_pos['p2']['x'], 2) + pow(closest_y - self.p_pos['p2']['y'], 2) )
+            player_attrs = {}
+            player_attrs['v'] = min(distance_to_reach/closest_time, self.max_player_speed)
+            player_attrs['alpha'] = atan((closest_x - self.p_pos['p2']['x']) / (closest_y - self.p_pos['p2']['y'])) #NEED TO THINK
+            return player_attrs
     
     def getP2Action(self):
         action = {}
@@ -413,7 +465,12 @@ class BadmintonEnv(gym.Env):
         """
         points_before_action = self.player_points
         #Take action. Need to define action_state, as p1 action is action_state[action]
-        self.act(self.convertActionListToAction(action), self.getP2Action())
+        p1_action = self.convertActionListToAction(action)
+        p2_action = self.getP2Action()
+        print(self.chance)
+        #print(p1_action)
+        print(p2_action)
+        self.act(p1_action, p2_action)
         reward = self.getReward(points_before_action)
         ob = glReadPixels(0, 0, 800, 600, GL_RGB, GL_UNSIGNED_INT)
         episode_over = self.checkEpisodeOver()
@@ -459,16 +516,16 @@ class BadmintonEnv(gym.Env):
                 else:
                     super(MyEnv, self).render(mode=mode) # just raise an exception
         """
-        self.render_court.p1_coord = [self.p_pos['p1']['x']*100 - 700, self.p_pos['p1']['y']*100 - 360]
-        self.render_court.p2_coord = [self.p_pos['p2']['x']*100 - 700, self.p_pos['p2']['y']*100 - 360]
+        self.render_court.p1_coord = [self.p_pos['p1']['y']*100 - 305, self.p_pos['p1']['x']*100 - 670]
+        self.render_court.p2_coord = [self.p_pos['p2']['y']*100 - 305, self.p_pos['p2']['x']*100 - 670]
         sx, sy, sz = self.get_shuttle_pos()
-        self.render_court.shuttle_coord = [sx*100 - 700, sy*100 - 360, sz*100]
+        self.render_court.shuttle_coord = [sy*100 - 305, sx*100 - 670, sz*100]
         glPushMatrix()
         glLoadIdentity()
         glTranslatef(0, 0, 0)
         glRotatef(0, 0, 0, 0)
-        glMultMatrixf(view_mat)
-        glGetFloatv(GL_MODELVIEW_MATRIX, view_mat)
+        glMultMatrixf(self.view_mat)
+        glGetFloatv(GL_MODELVIEW_MATRIX, self.view_mat)
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
         self.render_court.boundary()
         self.render_court.net()

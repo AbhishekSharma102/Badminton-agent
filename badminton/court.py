@@ -9,10 +9,10 @@ import numpy
 class RenderCourt():
     def __init__(self):
         self.vertices = (
-            (260, 670, 0),
-            (260, -670, 0),
-            (-260, -670, 0),
-            (-260, 670, 0) 
+            (305, 670, 0),
+            (305, -670, 0),
+            (-305, -670, 0),
+            (-305, 670, 0) 
             )
         
         self.shuttle_vertices = (
@@ -91,35 +91,36 @@ class RenderCourt():
     
     def boundary(self):
         glBegin(GL_LINES)
-        glVertex3fv(vertices[0])
-        glVertex3fv(vertices[1])
-        glVertex3fv(vertices[1])
-        glVertex3fv(vertices[2])
-        glVertex3fv(vertices[2])
-        glVertex3fv(vertices[3])
-        glVertex3fv(vertices[3])
-        glVertex3fv(vertices[0])
+        glVertex3fv(self.vertices[0])
+        glVertex3fv(self.vertices[1])
+        glVertex3fv(self.vertices[1])
+        glVertex3fv(self.vertices[2])
+        glVertex3fv(self.vertices[2])
+        glVertex3fv(self.vertices[3])
+        glVertex3fv(self.vertices[3])
+        glVertex3fv(self.vertices[0])
         glEnd()
     
     def net(self):
         glBegin(GL_LINES)
-        glVertex3fv((260, 0, 0))
-        glVertex3fv((-260, 0, 0))
-        glVertex3fv((260, 0, 0))
-        glVertex3fv((260, 0, 152))
-        glVertex3fv((260, 0, 152))
-        glVertex3fv((-260, 0, 152))
-        glVertex3fv((-260, 0, 152))
-        glVertex3fv((-260, 0, 0))
+        glVertex3fv((305, 0, 0))
+        glVertex3fv((-305, 0, 0))
+        glVertex3fv((305, 0, 0))
+        glVertex3fv((305, 0, 152))
+        glVertex3fv((305, 0, 152))
+        glVertex3fv((-305, 0, 152))
+        glVertex3fv((-305, 0, 152))
+        glVertex3fv((-305, 0, 0))
         glEnd() 
     
     def shuttle(self):
-        xcord, ycord, zcord = self.shuttle_cord[0], self.shuttle_cord[1], self.shuttle_cord[2]
+        xcord, ycord, zcord = self.shuttle_coord[0], self.shuttle_coord[1], self.shuttle_coord[2]
+        #RED
         glColor3f(1.0,0.0,0.0)
         glBegin(GL_LINES)
-        for edge in shuttle_edges:
+        for edge in self.shuttle_edges:
             for vertex in edge:
-                cord = list(shuttle_vertices[vertex])
+                cord = list(self.shuttle_vertices[vertex])
                 cord[0] += xcord
                 cord[1] += ycord
                 cord[2] += zcord
@@ -128,6 +129,7 @@ class RenderCourt():
         glColor3f(1.0,1.0,1.0)
     
     def playerBase(self, xcord, ycord):
+        print(xcord, ycord)
         glVertex3fv((xcord+10, ycord+10, 0))
         glVertex3fv((xcord+10, ycord-10, 0))
         glVertex3fv((xcord+10, ycord-10, 0))
@@ -138,16 +140,18 @@ class RenderCourt():
         glVertex3fv((xcord+10, ycord+10, 0))
     
     def playerOne(self):
+        #BLUE
         glColor3f(0.0,0.0,1.0)
         glBegin(GL_LINES)
-        self.playerBase(self.p1_cord[0], self.p1_cord[1])
+        self.playerBase(self.p1_coord[0], self.p1_coord[1])
         glEnd()
         glColor3f(1.0,1.0,1.0)
     
     def playerTwo(self):
+        #GREEN
         glColor3f(0.0,1.0,0.0)
         glBegin(GL_LINES)
-        self.playerBase(self.p1_cord[0], self.p1_cord[1])
+        self.playerBase(self.p2_coord[0], self.p2_coord[1])
         glEnd()
         glColor3f(1.0,1.0,1.0)
     """
