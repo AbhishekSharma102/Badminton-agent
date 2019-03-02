@@ -9,10 +9,11 @@ import pygame
 from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
-from math import sqrt, log, atan, exp, sin, cos, tan, pi, ceil
+from math import sqrt, log, atan, exp, sin, cos, tan, pi, ceil, floor
 from badminton.court import RenderCourt
 from gym import spaces
 import random
+from scipy.optimize import bisect
 
 class BadmintonEnv(gym.Env):
     def __init__(self):
@@ -26,7 +27,7 @@ class BadmintonEnv(gym.Env):
         self.view_mat = self.render_court.IdentityMat44()
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
-        glTranslatef(0, 0, -5000)
+        glTranslatef(0, 0, -2000)
         glRotatef(-45, 1, 0, 0)
         glGetFloatv(GL_MODELVIEW_MATRIX, self.view_mat)
         glLoadIdentity()
@@ -93,6 +94,8 @@ class BadmintonEnv(gym.Env):
         self.max_action_space_attr = np.array([self.max_player_speed, self.max_angle, self.max_player_speed, self.max_angle, self.max_angle])
         self.action_space = spaces.Box(low=self.min_action_space_attr, high=self.max_action_space_attr)
         self.observation_space = spaces.Box(low=0, high=300, shape=(800,600), dtype=np.float32)
+        
+        self.destination_point = [0, 0, 0]
             
     def new_rally(self):
         #players come back to center court 
@@ -392,42 +395,59 @@ class BadmintonEnv(gym.Env):
         return x,y,z,frame_time
     
     def getRandomVelocityPsiTheta(self):
-        velocity = random.randint(self.min_shuttle_speed, self.max_shuttle_speed)
+        velocity = random.randint(self.min_shuttle_speed, self.max_shuttle_speed-30)
         psi = random.uniform(-np.pi/4, np.pi/4)
-        theta = random.uniform(0, np.pi/2)
+        theta = random.uniform(0, np.pi/4)
         return velocity, theta, psi
         
     
     def getShuttleAttributesForP2(self):
         if self.shuttle_within_range('p2'):
             #return one of hard coded trajectories
-            '''closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
-            psi = atan((closest_x - self.p_pos['p2']['x']) / (closest_y - self.p_pos['p2']['y']))
-            
-            vt, g = 6.8, 9.8
-            x, y = self.getShuttleEndPoint(closest_x, closest_y)
-            speed_of_return = random.randint(self.min_shuttle_speed, self.max_shuttle_speed)
-            thetai = Symbol('thetai')
-            numerator = sy.sin( (sy.exp(g*x/pow(vt, 2))-1)*(vt/(speed_of_return*sy.cos(thetai)) ) + sy.atan( vt/(speed_of_return*sy.sin(thetai)) ) )
-            denominator = sy.sin( sy.atan(vt/ (speed_of_return*sy.sin(thetai))))
-            eqn = (sy.log(numerator/denominator)*pow(vt, 2)/g) - y
-            thetai_val = solve(eqn, thetai)'''
             speed_of_return, thetai_val, psi = self.getRandomVelocityPsiTheta()
             return {'vi': speed_of_return, 'thetai': thetai_val, 'psi': psi}
         else:
             return { 'vi': 0, 'thetai': 0, 'psi': 0 }
         
+    def getShuttleAttributesForP1(self):
+        if self.shuttle_within_range('p1'):
+            #return one of hard coded trajectories
+            speed_of_return, thetai_val, psi = self.getRandomVelocityPsiTheta()
+            return {'vi': speed_of_return, 'thetai': thetai_val, 'psi': psi}
+        else:
+            return { 'vi': 0, 'thetai': 0, 'psi': 0 }
+    
+    def getPlayerAttributesForP1(self):
+        if self.chance == 'p2' or self.shuttle_within_range('p1'):
+            return { 'v': 0, 'alpha': 0 }
+        else:
+            #get shortest path between curr pos and the landing point
+            closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
+            self.destination_point = [closest_x, closest_y, closest_z]
+            distance_to_reach = sqrt(pow(closest_x - self.p_pos['p1']['x'], 2) + pow(closest_y - self.p_pos['p1']['y'], 2) )
+            player_attrs = {}
+            player_attrs['v'] = min(distance_to_reach/closest_time, self.max_player_speed)
+            player_attrs['alpha'] = atan((closest_y - self.p_pos['p1']['y']) / (closest_x - self.p_pos['p1']['x'])) #NEED TO THINK
+            return player_attrs
+    
     def getPlayerAttributesForP2(self):
         if self.chance == 'p1' or self.shuttle_within_range('p2'):
             return { 'v': 0, 'alpha': 0 }
         else:
             #get shortest path between curr pos and the landing point
             closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
+            self.destination_point = [closest_x, closest_y, closest_z]
             distance_to_reach = sqrt(pow(closest_x - self.p_pos['p2']['x'], 2) + pow(closest_y - self.p_pos['p2']['y'], 2) )
             player_attrs = {}
             player_attrs['v'] = min(distance_to_reach/closest_time, self.max_player_speed)
-            player_attrs['alpha'] = atan((closest_x - self.p_pos['p2']['x']) / (closest_y - self.p_pos['p2']['y'])) #NEED TO THINK
+            player_attrs['alpha'] = atan((closest_y - self.p_pos['p2']['y']) / (closest_x - self.p_pos['p2']['x'])) #NEED TO THINK
             return player_attrs
+    
+    def getP1Action(self):
+        action = {}
+        action['p_attr'] = self.getPlayerAttributesForP1()
+        action['s_attr'] = self.getShuttleAttributesForP1()
+        return action
     
     def getP2Action(self):
         action = {}
@@ -466,8 +486,9 @@ class BadmintonEnv(gym.Env):
         points_before_action = self.player_points
         #Take action. Need to define action_state, as p1 action is action_state[action]
         p1_action = self.convertActionListToAction(action)
+        p1_action = self.getP1Action()
         p2_action = self.getP2Action()
-        print(self.chance)
+        #print(self.chance)
         #print(p1_action)
         print(p2_action)
         self.act(p1_action, p2_action)
@@ -518,6 +539,7 @@ class BadmintonEnv(gym.Env):
         """
         self.render_court.p1_coord = [self.p_pos['p1']['y']*100 - 305, self.p_pos['p1']['x']*100 - 670]
         self.render_court.p2_coord = [self.p_pos['p2']['y']*100 - 305, self.p_pos['p2']['x']*100 - 670]
+        self.render_court.destination_coord = [self.destination_point[1]*100 - 305, self.destination_point[0]*100 - 670, self.destination_point[2]*100]
         sx, sy, sz = self.get_shuttle_pos()
         self.render_court.shuttle_coord = [sy*100 - 305, sx*100 - 670, sz*100]
         glPushMatrix()
@@ -532,7 +554,9 @@ class BadmintonEnv(gym.Env):
         self.render_court.shuttle()
         self.render_court.playerOne()
         self.render_court.playerTwo()
+        self.render_court.printDestination()
         glPopMatrix()
+        pygame.time.wait(100)
         pygame.display.flip()
     
     def seed(self, seed=None):

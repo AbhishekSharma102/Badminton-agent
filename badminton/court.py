@@ -44,6 +44,7 @@ class RenderCourt():
         self.shuttle_coord = [0, 0, 0]
         self.p1_coord = [0, 0]
         self.p2_coord = [0, 0]
+        self.destination_coord = [0, 0, 0]
     
     def IdentityMat44(self):
         return numpy.matrix(numpy.identity(4), copy=False, dtype='float32')
@@ -154,6 +155,22 @@ class RenderCourt():
         self.playerBase(self.p2_coord[0], self.p2_coord[1])
         glEnd()
         glColor3f(1.0,1.0,1.0)
+    
+    def printDestination(self):
+        glColor3f(1.0, 1.0, 1.0)
+        glBegin(GL_LINES)
+        xcord = self.destination_coord[0]
+        ycord = self.destination_coord[1]
+        zcord = self.destination_coord[2]
+        glVertex3fv((xcord+10, ycord+10, zcord))
+        glVertex3fv((xcord+10, ycord-10, zcord))
+        glVertex3fv((xcord+10, ycord-10, zcord))
+        glVertex3fv((xcord-10, ycord-10, zcord))
+        glVertex3fv((xcord-10, ycord-10, zcord))
+        glVertex3fv((xcord-10, ycord+10, zcord))
+        glVertex3fv((xcord-10, ycord+10, zcord))
+        glVertex3fv((xcord+10, ycord+10, zcord))
+        glEnd()
     """
     def __init__(self):
         pygame.init()
