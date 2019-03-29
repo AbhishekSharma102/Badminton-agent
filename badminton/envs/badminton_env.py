@@ -5,14 +5,14 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
 #from PIL import Image
-#import pygame
+import pygame
 from pygame.locals import *
-#from OpenGL.GL import *
-#from OpenGL.GLU import *
+from OpenGL.GL import *
+from OpenGL.GLU import *
 from math import sqrt, log, atan, exp, sin, cos, tan, pi, ceil, floor
 #import sys
 #sys.path.append("../..") 
-#from badminton.court import RenderCourt
+from badminton.court import RenderCourt
 from gym import spaces
 import random
 from scipy.optimize import bisect
@@ -20,8 +20,8 @@ from scipy.optimize import bisect
 class BadmintonEnv(gym.Env):
     def __init__(self):
         #LOAD PYGAME WINDOW
-        """self.render_court = RenderCourt()
-        $pygame.init()
+        self.render_court = RenderCourt()
+        pygame.init()
         display = (800,600)
         self.screen = pygame.display.set_mode(display, OPENGL)
         glMatrixMode(GL_PROJECTION)
@@ -33,7 +33,7 @@ class BadmintonEnv(gym.Env):
         glRotatef(-45, 1, 0, 0)
         glGetFloatv(GL_MODELVIEW_MATRIX, self.view_mat)
         glLoadIdentity()
-        self.font = pygame.font.Font(None, 60)"""
+        self.font = pygame.font.Font(None, 60)
         #parameters representing the game
         self.current_state = None
         #indicates whether a rally is over
@@ -525,10 +525,10 @@ class BadmintonEnv(gym.Env):
         obs += (self.shuttle_trajectory)
         return np.ravel(np.array(obs))
         
-    '''def drawScore(self, score):
+    def drawScore(self, score):
         textsurface = self.myfont.render(score, False, (0, 0, 0))
         self.screen.blit(textsurface,(0,0))
-    '''    
+      
     
     def step(self, action):
         """
@@ -560,8 +560,8 @@ class BadmintonEnv(gym.Env):
         """
         points_before_action = self.player_points
         #Take action. Need to define action_state, as p1 action is action_state[action]
-        p1_action = self.convertActionListToAction(action)
-        #p1_action = self.getP1Action()
+        #p1_action = self.convertActionListToAction(action)
+        p1_action = self.getP1Action()
         p2_action = self.getP2Action()
         #print(self.chance)
         #print(p1_action)
@@ -586,13 +586,13 @@ class BadmintonEnv(gym.Env):
         self.shuttle_trajectory = None
         return self.setObservationState()
     
-    '''def drawText(self, position, textString):     
+    def drawText(self, position, textString):     
         font = pygame.font.Font (None, 64)
         textSurface = font.render(textString, True, (255,255,255,255), (0,0,0,255))     
         textData = pygame.image.tostring(textSurface, "RGBA", True)     
         glRasterPos3d(*position)     
         glDrawPixels(textSurface.get_width(), textSurface.get_height(), GL_RGBA, GL_UNSIGNED_BYTE, textData)
-    '''
+    
     
     def render(self, mode='human'):
         """Renders the environment.
@@ -624,7 +624,7 @@ class BadmintonEnv(gym.Env):
                 else:
                     super(MyEnv, self).render(mode=mode) # just raise an exception
         """
-        """text = str(self.player_points['p1']) + ":" + str(self.player_points['p2'])
+        text = str(self.player_points['p1']) + ":" + str(self.player_points['p2'])
         self.render_court.p1_coord = [self.p_pos['p1']['y']*100 - 305, self.p_pos['p1']['x']*100 - 670]
         self.render_court.p2_coord = [self.p_pos['p2']['y']*100 - 305, self.p_pos['p2']['x']*100 - 670]
         self.render_court.destination_coord = [self.destination_point[1]*100 - 305, self.destination_point[0]*100 - 670, self.destination_point[2]*100]
@@ -646,8 +646,8 @@ class BadmintonEnv(gym.Env):
         self.drawText((500, 300, 10), text)
         glPopMatrix()
         pygame.time.wait(100)
-        pygame.display.flip()"""
-        pass
+        pygame.display.flip()
+        #pass
     
     def seed(self, seed=None):
         """Sets the seed for this env's random number generator(s).
