@@ -304,13 +304,13 @@ class BadmintonEnv(gym.Env):
         #take action for each player
         #player can either hit the shuttle or move
         if(self.chance == 'p1'):
-            if(not self.move_player('p1', p1_action)):
-                self.shuttle_hit(self.chance, p1_action)
+            self.shuttle_hit(self.chance, p1_action)
+            self.move_player('p1', p1_action)
             self.move_player('p2', p2_action)
         
         elif(self.chance == 'p2'):
-            if(not self.move_player('p2', p2_action)):
-                self.shuttle_hit(self.chance, p2_action)
+            self.shuttle_hit(self.chance, p2_action)
+            self.move_player('p2', p2_action) 
             self.move_player('p1', p1_action)
         
         else:
