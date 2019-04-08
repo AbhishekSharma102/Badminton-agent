@@ -1,10 +1,11 @@
 import numpy as np
-#import tensorflow as tf
+import tensorflow as tf
 import gym
 import time
-#import spinup
+import spinup
 import badminton
-#from spinup.utils.run_utils import setup_logger_kwargs
+from spinup.utils.run_utils import setup_logger_kwargs
+
 
 env = gym.make('badminton-v0')
 env.reset()

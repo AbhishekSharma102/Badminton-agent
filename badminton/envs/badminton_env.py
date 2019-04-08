@@ -20,6 +20,7 @@ from scipy.optimize import bisect
 class BadmintonEnv(gym.Env):
     def __init__(self):
         #LOAD PYGAME WINDOW
+        
         self.render_court = RenderCourt()
         pygame.init()
         display = (800,600)
@@ -34,6 +35,7 @@ class BadmintonEnv(gym.Env):
         glGetFloatv(GL_MODELVIEW_MATRIX, self.view_mat)
         glLoadIdentity()
         self.font = pygame.font.Font(None, 60)
+        
         #parameters representing the game
         self.current_state = None
         #indicates whether a rally is over
@@ -89,12 +91,12 @@ class BadmintonEnv(gym.Env):
         self.min_player_speed = 0
         #taken from internet
         self.max_shuttle_speed = 50
-        self.min_shuttle_speed = 0
+        self.min_shuttle_speed = 5
         #angle range
         self.min_angle = -np.pi
         self.max_angle = np.pi
-        self.min_action_space_attr = np.array([self.min_player_speed, self.min_angle, self.min_player_speed, self.min_angle, self.min_angle])
-        self.max_action_space_attr = np.array([self.max_player_speed, self.max_angle, self.max_player_speed, self.max_angle, self.max_angle])
+        self.min_action_space_attr = np.array([self.min_player_speed, self.min_angle, self.min_shuttle_speed, 0.0, self.min_angle/4])
+        self.max_action_space_attr = np.array([self.max_player_speed, self.max_angle, self.max_shuttle_speed, self.max_angle/2, self.max_angle/4])
         self.action_space = spaces.Box(low=self.min_action_space_attr, high=self.max_action_space_attr)
         #assuming maximum height reached by shuttle as 20 meters
         #observation_space has first 3 indexes for player pos, shuttle pos, and then remaining are for shuttle pos at that particular time frame. (assuming no shot lasts for more than 5 secs)
@@ -107,12 +109,18 @@ class BadmintonEnv(gym.Env):
         #players come back to center court 
         self.p_pos = {'p1':{'x':3.35, 'y':3.05}, 'p2':{'x':10.05, 'y':3.05}}
         #shuttle is launched by p1
-        self.shuttle_rel_pos = {'k':-3.35, 'z':0.5, 't':0}
-        self.shuttle_rel_pos_prev = {'k':-3.35, 'z':0.5, 't':-1}
+        # self.shuttle_rel_pos = {'k':-3.35, 'z':0.5, 't':0}
+        # self.shuttle_rel_pos_prev = {'k':-3.35, 'z':0.5, 't':-1}
+        # self.shuttle_trajectory = None
+        # self.shuttle_attr = {'vi':1, 'thetai':0.1, 'cx':6.7, 
+        #                      'cy':3.05, 'psi':0, 'k0':-3.35, 'z0':0.5}
+        # self.chance = 'p1'
+        self.shuttle_rel_pos = {'k':3.35, 'z':0.5, 't':0}
+        self.shuttle_rel_pos_prev = {'k':3.35, 'z':0.5, 't':-1}
         self.shuttle_trajectory = None
         self.shuttle_attr = {'vi':1, 'thetai':0.1, 'cx':6.7, 
-                             'cy':3.05, 'psi':0, 'k0':-3.35, 'z0':0.5}
-        self.chance = 'p1'
+                             'cy':3.05, 'psi':0, 'k0':3.35, 'z0':0.5}
+        self.chance = 'p2'
         #self.make_frame()
         
     def shuttle_trajectory_wrt_t(self, vi, thetai, t):
@@ -121,7 +129,10 @@ class BadmintonEnv(gym.Env):
         v_t = 6.8;
         g = 9.8;
         #print(vi, thetai)
-        d = (pow(v_t,2)/g)*log((vi*cos(thetai)*g*t+pow(v_t,2))/pow(v_t,2));
+        if (vi*cos(thetai)*g*t+pow(v_t,2))/pow(v_t,2) == 0:
+            print(vi, thetai)
+        d = (pow(v_t,2)/g)*log((vi*cos(thetai)*g*t+pow(v_t,2))/pow(v_t,2))
+
         
         arg_init = (((v_t/(vi*cos(thetai)))*(exp(g*0/pow(v_t,2))-1))
                 + atan(v_t/(vi*sin(thetai))))
@@ -230,6 +241,8 @@ class BadmintonEnv(gym.Env):
                     self.shuttle_rel_pos['t'] = 0
                     self.chance = 'p2' 
                     self.shuttle_trajectory = None
+                    #print("p1 hit")
+                    #self.destination_point = [0, 0, 0]
                 
         else:
             if(p_action['s_attr']['vi'] > 0):
@@ -247,6 +260,7 @@ class BadmintonEnv(gym.Env):
                     self.shuttle_rel_pos['t'] = 0
                     self.chance = 'p1'
                     self.shuttle_trajectory = None
+                    #self.destination_point = [0, 0, 0]
         
     def outside_court_bounds(self):
         #check if the current shuttle position is outside court bounds
@@ -368,7 +382,12 @@ class BadmintonEnv(gym.Env):
         return False
 
     def getReward(self, points_before_action):
-        return (self.player_points['p1'] - points_before_action['p1']) - (self.player_points['p2'] - points_before_action['p2'])
+        #if self.chance == 'p1' and (self.player_points['p1'] - points_before_action['p1']):
+        #   return 1
+        totalReward = 0
+        if self.chance == 'p1' and self.shuttle_rel_pos['z'] <= self.pcone_h and abs(self.destination_point[0] - self.p_pos['p1']['x'] + self.destination_point[1] - self.p_pos['p1']['y']) < 0.1:
+            totalReward += 1
+        return totalReward + ((self.player_points['p1'] - points_before_action['p1']) - (self.player_points['p2'] - points_before_action['p2']))*2
     
     def convertActionListToAction(self, action_list):
         action = {'p_attr': { 'v': action_list[0],
@@ -408,10 +427,11 @@ class BadmintonEnv(gym.Env):
         #get shuttle abs position in xy
         x = (k*cos(self.shuttle_attr['psi']) + self.shuttle_attr['cx'])
         y = (k*sin(self.shuttle_attr['psi']) + self.shuttle_attr['cy'])
+        #print(x, y, z, frame_time)
         return x,y,z,frame_time
     
     def getRandomVelocityTheta(self):
-        velocity = random.randint(self.min_shuttle_speed+20, self.max_shuttle_speed-25)
+        velocity = random.randint(self.min_shuttle_speed+15, self.max_shuttle_speed-25)
         theta = random.uniform(np.pi/6, np.pi/4)
         return velocity, theta
     
@@ -426,6 +446,7 @@ class BadmintonEnv(gym.Env):
                 psi = random.uniform(-np.pi/6, 0)
             else:
                 psi = random.uniform(-np.pi/6, np.pi/6)
+            psi = 0
             return {'vi': speed_of_return, 'thetai': thetai_val, 'psi': psi}
         else:
             return { 'vi': 0, 'thetai': 0, 'psi': 0 }
@@ -441,6 +462,7 @@ class BadmintonEnv(gym.Env):
                 psi = random.uniform(-np.pi/4, 0)
             else:
                 psi = random.uniform(-np.pi/4, np.pi/4)
+            psi = 0
             return {'vi': speed_of_return, 'thetai': thetai_val, 'psi': psi}
         else:
             return { 'vi': 0, 'thetai': 0, 'psi': 0 }
@@ -469,9 +491,12 @@ class BadmintonEnv(gym.Env):
             return player_attrs
     
     def getPlayerAttributesForP2(self):
+        #print("inside getPlayerAttributesForP2 chance %s" % (self.chance))
         if self.chance == 'p1' or self.shuttle_within_range('p2'):
+            #print("inside if")
             return { 'v': 0, 'alpha': 0 }
         else:
+            #print("inside else")
             #get shortest path between curr pos and the landing point
             closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
             self.destination_point = [closest_x, closest_y, closest_z]
@@ -485,9 +510,15 @@ class BadmintonEnv(gym.Env):
                 player_attrs['alpha'] = atan((self.p_pos['p2']['y'] - closest_y) / abs(self.p_pos['p2']['x'] - closest_x)) #NEED TO THINK
             else:
                 if(self.p_pos['p2']['y'] - closest_y > 0):
-                    player_attrs['alpha'] = pi - atan((self.p_pos['p2']['y'] - closest_y) / abs(self.p_pos['p2']['x'] - closest_x)) 
+                    if abs(self.p_pos['p2']['x'] - closest_x) == 0:
+                        player_attrs['alpha'] = -pi/2
+                    else:
+                        player_attrs['alpha'] = pi - atan((self.p_pos['p2']['y'] - closest_y) / abs(self.p_pos['p2']['x'] - closest_x)) 
                 else:
-                    player_attrs['alpha'] = - pi - atan((self.p_pos['p2']['y'] - closest_y) / abs(self.p_pos['p2']['x'] - closest_x)) 
+                    if abs(self.p_pos['p2']['x'] - closest_x) == 0:
+                        player_attrs['alpha'] = pi/2
+                    else:
+                        player_attrs['alpha'] = - pi - atan((self.p_pos['p2']['y'] - closest_y) / abs(self.p_pos['p2']['x'] - closest_x)) 
             
             return player_attrs
     
@@ -508,6 +539,9 @@ class BadmintonEnv(gym.Env):
             #print("Old trajectory is being used")
             return
         #print("New trajectory is being computed")
+        if self.destination_point == [0, 0, 0] or self.shuttle_trajectory == None:
+            closest_x, closest_y, closest_z, closest_time = self.closestInterceptablePoint()
+            self.destination_point = [closest_x, closest_y, closest_z]
         self.shuttle_trajectory = []
         for i in range(0, int(5/self.frame_rate)):
             d, z = self.shuttle_trajectory_wrt_t(self.shuttle_attr['vi'], self.shuttle_attr['thetai'], i*self.frame_rate)
@@ -515,6 +549,8 @@ class BadmintonEnv(gym.Env):
             xval = cx - d*cos(psi)
             yval = cy - d*sin(psi)
             self.shuttle_trajectory.append([xval, yval, z])
+        #print(self.shuttle_trajectory)
+        #print(self.destination_point)
     
     def setObservationState(self):
         obs = []
@@ -525,10 +561,11 @@ class BadmintonEnv(gym.Env):
         obs += (self.shuttle_trajectory)
         return np.ravel(np.array(obs))
         
+    
     def drawScore(self, score):
         textsurface = self.myfont.render(score, False, (0, 0, 0))
         self.screen.blit(textsurface,(0,0))
-      
+     
     
     def step(self, action):
         """
@@ -558,19 +595,25 @@ class BadmintonEnv(gym.Env):
                  However, official evaluations of your agent are not allowed to
                  use this for learning.
         """
-        points_before_action = self.player_points
+        points_before_action = dict(self.player_points)
+        #print("points before action " + str(points_before_action))
         #Take action. Need to define action_state, as p1 action is action_state[action]
-        #p1_action = self.convertActionListToAction(action)
-        p1_action = self.getP1Action()
+        p1_action = self.convertActionListToAction(action)
+        #p1_action = self.getP1Action()
         p2_action = self.getP2Action()
         #print(self.chance)
         #print(p1_action)
         #print(p2_action)
         self.act(p1_action, p2_action)
         reward = self.getReward(points_before_action)
-        
+        #print("point before action " + str(points_before_action) + " point after " + str(self.player_points))
+        #if reward > 0:
+        #    print("Reward is " + str(reward))
         obs = self.setObservationState()
         episode_over = self.checkEpisodeOver()
+        if episode_over:
+            print(self.player_points)
+
         #print(str(self.player_points['p1']) + ":" + str(self.player_points['p2']))
         return obs, reward, episode_over, {}
     
@@ -585,6 +628,7 @@ class BadmintonEnv(gym.Env):
         self.player_points['p2'] = 0
         self.shuttle_trajectory = None
         return self.setObservationState()
+    
     
     def drawText(self, position, textString):     
         font = pygame.font.Font (None, 64)
@@ -624,6 +668,7 @@ class BadmintonEnv(gym.Env):
                 else:
                     super(MyEnv, self).render(mode=mode) # just raise an exception
         """
+        
         text = str(self.player_points['p1']) + ":" + str(self.player_points['p2'])
         self.render_court.p1_coord = [self.p_pos['p1']['y']*100 - 305, self.p_pos['p1']['x']*100 - 670]
         self.render_court.p2_coord = [self.p_pos['p2']['y']*100 - 305, self.p_pos['p2']['x']*100 - 670]
@@ -645,8 +690,9 @@ class BadmintonEnv(gym.Env):
         self.render_court.printDestination()
         self.drawText((500, 300, 10), text)
         glPopMatrix()
-        pygame.time.wait(100)
+        #pygame.time.wait(30)
         pygame.display.flip()
+        
         #pass
     
     def seed(self, seed=None):
